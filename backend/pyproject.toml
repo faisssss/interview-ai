@@ -1,0 +1,48 @@
+[project]
+name = "interview-ai-backend"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "fastapi",
+  "uvicorn[standard]",
+  "python-multipart",
+  "sqlalchemy[asyncio]>=2.0.40,<2.1",  # 2.1 fails hard when Smart App Control blocks its Cython module; 2.0 falls back to pure Python
+  "asyncpg",
+  "alembic",
+  "pgvector",
+  "pydantic>=2",
+  "pydantic-settings",
+  "anthropic",
+  "av==15.1.0",  # newer releases are blocked by Windows Smart App Control on the dev machine
+  "numpy",
+  "tzdata",
+]
+
+[project.optional-dependencies]
+ml = ["faster-whisper>=1.2", "pyannote.audio>=4", "torch"]
+
+[dependency-groups]
+dev = ["pytest", "pytest-asyncio", "httpx", "ruff", "pyright"]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC"]
+
+[tool.pyright]
+pythonVersion = "3.12"
+include = ["app", "tests", "scripts"]
+typeCheckingMode = "standard"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = ["gpu: needs the local GPU models", "paid: calls a paid API"]
+addopts = "-m 'not gpu and not paid'"

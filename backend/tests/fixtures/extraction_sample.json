@@ -1,0 +1,30 @@
+{
+  "summary": "The team reviewed the pricing deck and confirmed the launch date. Rahul will send the updated deck by Friday, and Priya will draft the onboarding emails.",
+  "topics": ["Pricing deck", "Launch date", "Onboarding emails"],
+  "action_items": [
+    {
+      "description": "Send the updated pricing deck",
+      "owner": "Speaker 2",
+      "due_text": "by Friday",
+      "due_date": "2026-10-30",
+      "evidence": [0, 1]
+    },
+    {
+      "description": "Draft the onboarding emails",
+      "owner": "Priya",
+      "due_text": "by the end of February",
+      "due_date": "2026-02-30",
+      "evidence": [3]
+    },
+    {
+      "description": "Book the launch venue",
+      "owner": null,
+      "due_text": null,
+      "due_date": null,
+      "evidence": [999]
+    }
+  ],
+  "decisions": [
+    {"text": "The launch stays on the 15th", "evidence": [2, 3]}
+  ]
+}

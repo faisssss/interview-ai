@@ -212,17 +212,17 @@ Bulk LLM calls in evaluations use the Message Batches API, which costs half as m
 | Table | Key columns |
 |---|---|
 | `workspaces` | id, kind (`local`, `demo`, `sandbox`), expires_at |
-| `meetings` | id, workspace_id, title, recorded_at (editable; used to resolve "by Friday"), duration, source (`upload`, `live`), status, current_step, step_timings, error, audio paths, language_mode |
+| `meetings` | id, workspace_id, title, recorded_at (editable; used to resolve "by Friday"), duration, source (`upload`, `live`), status, current_step, step_timings, error, warning (set when the transcript is ready but the notes failed), language_mode, original_key (where the upload is stored) |
 | `speakers` | id, meeting_id, label, person_id, voice_embedding |
 | `people` | id, workspace_id, name, aliases, voice_profile |
-| `utterances` | id, meeting_id, speaker_id, start_ms, end_ms, text, text_roman, words (JSON with per-word timings) |
+| `utterances` | id, meeting_id, seq (order within the meeting; the LLM cites these), speaker_id, start_ms, end_ms, text, text_roman, words (JSON with per-word timings) |
 | `chunks` | id, meeting_id, first and last utterance_id, start_ms, end_ms, text, embedding (vector), search_text (tsvector) |
 | `summaries` | meeting_id, overview, topics, model, prompt_version |
-| `action_items` | id, workspace_id, meeting_id, description, owner_person_id, owner_text, due_date, due_text, status, evidence_utterance_ids, provisional, model, prompt_version |
+| `action_items` | id, workspace_id, meeting_id, description, owner_speaker_id (the speaker who owns it, when the owner is a voice in this meeting), owner_person_id, owner_text, due_date, due_text, status, evidence_utterance_ids, provisional, model, prompt_version |
 | `action_item_events` | id, action_item_id, meeting_id, kind (`completed`, `reopened`, `dropped`, `updated`), source (`llm`, `user`), evidence_utterance_ids, undone |
 | `decisions` | id, workspace_id, meeting_id, text, evidence_utterance_ids, supersedes_id, model, prompt_version |
 | `speaker_suggestions` | id, speaker_id, person_id or suggested name, reason (`name_cue`, `voice`), score, evidence, status |
-| `jobs` | id, kind, payload, status, attempts, run_after, locked_by, heartbeat_at, current_step, last_error |
+| `jobs` | id, kind, payload, status, attempts, max_attempts, run_after, locked_by, heartbeat_at, last_error |
 
 Schema changes go through Alembic migrations.
 
@@ -233,6 +233,7 @@ Schema changes go through Alembic migrations.
 | POST | `/api/meetings` | Upload a recording and queue processing |
 | GET | `/api/meetings`, `/api/meetings/{id}` | List meetings; one meeting with transcript, summary, items and decisions |
 | GET | `/api/meetings/{id}/audio` | Playback audio, with HTTP range support for seeking |
+| POST | `/api/meetings/{id}/retry` | Queue a failed meeting, or one with a warning, again |
 | PATCH | `/api/speakers/{id}` | Rename a speaker or link it to a person |
 | POST | `/api/suggestions/{id}/accept` | Accept a speaker-name suggestion |
 | GET | `/api/people`, `/api/people/{id}` | People and their commitments |
