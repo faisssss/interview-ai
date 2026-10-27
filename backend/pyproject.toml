@@ -6,14 +6,14 @@ dependencies = [
   "fastapi",
   "uvicorn[standard]",
   "python-multipart",
-  "sqlalchemy[asyncio]>=2.0",
+  "sqlalchemy[asyncio]>=2.0.40,<2.1",  # 2.1 fails hard when Smart App Control blocks its Cython module; 2.0 falls back to pure Python
   "asyncpg",
   "alembic",
   "pgvector",
   "pydantic>=2",
   "pydantic-settings",
   "anthropic",
-  "av",
+  "av==15.1.0",  # newer releases are blocked by Windows Smart App Control on the dev machine
   "numpy",
   "tzdata",
 ]
