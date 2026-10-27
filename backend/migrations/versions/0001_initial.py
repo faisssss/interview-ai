@@ -61,10 +61,11 @@ def upgrade() -> None:
         sa.Column("source", sa.String(length=20), server_default="upload", nullable=False),
         sa.Column("status", sa.String(length=20), server_default="queued", nullable=False),
         sa.Column("current_step", sa.String(length=20), nullable=True),
+        # JSON, not JSONB: JSONB reorders keys, and the steps must stay in the order they ran.
         sa.Column(
             "step_timings",
-            postgresql.JSONB(astext_type=sa.Text()),
-            server_default=sa.text("'{}'::jsonb"),
+            postgresql.JSON(astext_type=sa.Text()),
+            server_default=sa.text("'{}'::json"),
             nullable=False,
         ),
         sa.Column("error", sa.Text(), nullable=True),

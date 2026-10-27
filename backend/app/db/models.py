@@ -19,7 +19,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSON, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -84,9 +84,10 @@ class Meeting(Base):
         String(20), default=MeetingStatus.queued, server_default=MeetingStatus.queued
     )
     current_step: Mapped[str | None] = mapped_column(String(20))
-    # Seconds per finished step. Assign a new dict to change it, so SQLAlchemy sees the change.
+    # Seconds per finished step, in the order the steps ran. JSON rather than JSONB because
+    # JSONB reorders keys. Assign a new dict to change it, so SQLAlchemy sees the change.
     step_timings: Mapped[dict[str, float]] = mapped_column(
-        JSONB, default=dict, server_default=text("'{}'::jsonb")
+        JSON, default=dict, server_default=text("'{}'::json")
     )
     error: Mapped[str | None] = mapped_column(Text)
     warning: Mapped[str | None] = mapped_column(Text)

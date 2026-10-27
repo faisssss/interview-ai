@@ -21,6 +21,10 @@ from app.api.main import create_app
 from app.config import Settings
 from app.db.base import asyncpg_dsn, make_engine, make_session_factory
 from app.db.models import Workspace
+from app.providers.base import Providers
+from app.providers.fake import FakeDiarizer, FakeExtractor, FakeTranscriber
+from app.storage import LocalStorage
+from tests.audio_helpers import wav_bytes
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 TEST_DATABASE_URL = os.environ.get(
@@ -115,3 +119,35 @@ def make_client(settings: Settings):
 async def client(make_client) -> AsyncIterator[AsyncClient]:
     async with make_client() as api_client:
         yield api_client
+
+
+@pytest.fixture
+def fake_providers() -> Providers:
+    return Providers(FakeTranscriber(), FakeDiarizer(), FakeExtractor())
+
+
+@pytest.fixture
+def make_ctx(settings: Settings, session_factory, fake_providers: Providers):
+    """make_ctx(providers=None, **settings_overrides) -> PipelineContext on the test storage."""
+    from app.pipeline.runner import PipelineContext
+
+    def factory(providers: Providers | None = None, **overrides) -> PipelineContext:
+        ctx_settings = settings.model_copy(update=overrides)
+        return PipelineContext(
+            session_factory=session_factory,
+            storage=LocalStorage(ctx_settings.storage_dir),
+            providers=providers or fake_providers,
+            settings=ctx_settings,
+        )
+
+    return factory
+
+
+@pytest.fixture
+async def uploaded_meeting_id(client: AsyncClient) -> int:
+    """A 4-second recording uploaded as standup.wav, so it is stored as original.wav."""
+    response = await client.post(
+        "/api/meetings", files={"file": ("standup.wav", wav_bytes(4.0), "audio/wav")}
+    )
+    assert response.status_code == 201
+    return response.json()["id"]
