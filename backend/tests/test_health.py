@@ -1,12 +1,4 @@
-from httpx import ASGITransport, AsyncClient
-
-from app.api.main import create_app
-from app.config import Settings
-
-
-async def test_health_ok():
-    app = create_app(Settings(_env_file=None))  # pyright: ignore[reportCallIssue]
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.get("/api/health")
+async def test_health_reports_database(client):
+    response = await client.get("/api/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    assert response.json() == {"status": "ok", "database": "ok"}
