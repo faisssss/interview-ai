@@ -16,7 +16,9 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit("usage: python -m app.api.export_openapi <output.json>")
     schema = create_app().openapi()
     # Sorted and newline-terminated, so CI can check the committed copy is current with git diff.
-    Path(args[0]).write_text(json.dumps(schema, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    Path(args[0]).write_text(
+        json.dumps(schema, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n"
+    )
 
 
 if __name__ == "__main__":
