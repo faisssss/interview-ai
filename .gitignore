@@ -1,0 +1,22 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Secrets
+.env
+
+# Local recordings and processing files
+backend/data/
+
+# Node / Next.js
+node_modules/
+.next/
+frontend/test-results/
+frontend/playwright-report/
+
+# OS
+.DS_Store
+Thumbs.db
