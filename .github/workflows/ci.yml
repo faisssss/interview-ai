@@ -94,11 +94,9 @@ jobs:
         run: uv run python -m alembic upgrade head
       - name: Start the API and the worker
         working-directory: backend
-        # The venv's Python directly, not `uv run`: a still-running `uv run` holds uv's cache
-        # lock, and setup-uv's end-of-job cache cleanup times out waiting for it.
         run: |
-          nohup .venv/bin/python -m uvicorn app.api.main:app --port 8000 > "$RUNNER_TEMP/api.log" 2>&1 &
-          nohup .venv/bin/python -m app.jobs.worker > "$RUNNER_TEMP/worker.log" 2>&1 &
+          nohup uv run python -m uvicorn app.api.main:app --port 8000 > "$RUNNER_TEMP/api.log" 2>&1 &
+          nohup uv run python -m app.jobs.worker > "$RUNNER_TEMP/worker.log" 2>&1 &
           curl --fail --retry 30 --retry-connrefused --retry-delay 1 http://localhost:8000/api/health
       - name: Build the frontend
         working-directory: frontend
