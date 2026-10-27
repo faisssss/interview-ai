@@ -1,8 +1,9 @@
 """Request and response bodies. The frontend's TypeScript types are generated from these."""
 
 from datetime import date, datetime
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, StringConstraints
 
 from app.db.models import ActionItemStatus, MeetingStatus, PipelineStep
 
@@ -55,6 +56,14 @@ class DecisionOut(BaseModel):
     id: int
     text: str
     evidence: list[int]  # utterance IDs
+
+
+class SpeakerRenameIn(BaseModel):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)]
+
+
+class ActionItemUpdateIn(BaseModel):
+    status: ActionItemStatus
 
 
 class MeetingDetailOut(MeetingSummaryOut):

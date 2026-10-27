@@ -151,3 +151,12 @@ async def uploaded_meeting_id(client: AsyncClient) -> int:
     )
     assert response.status_code == 201
     return response.json()["id"]
+
+
+@pytest.fixture
+async def processed_meeting_id(make_ctx, uploaded_meeting_id: int) -> int:
+    """The uploaded meeting, processed with the fake providers (so it is ready)."""
+    from app.pipeline.runner import process_meeting
+
+    await process_meeting(make_ctx(), uploaded_meeting_id)
+    return uploaded_meeting_id

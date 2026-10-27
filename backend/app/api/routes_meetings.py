@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,7 +21,17 @@ from app.api.schemas import (
     SummaryOut,
     UtteranceOut,
 )
-from app.db.models import ActionItem, Decision, Meeting, Person, Speaker, Summary, Utterance
+from app.db.models import (
+    ActionItem,
+    ActionItemStatus,
+    Decision,
+    Meeting,
+    MeetingStatus,
+    Person,
+    Speaker,
+    Summary,
+    Utterance,
+)
 from app.jobs.queue import JOB_PROCESS_MEETING, enqueue
 from app.pipeline import ingest
 from app.storage import UploadTooLargeError, meeting_key
@@ -47,15 +58,39 @@ async def get_meeting(session: AsyncSession, meeting_id: int, workspace_id: int)
     return meeting
 
 
+async def speakers_with_names(
+    session: AsyncSession, meeting_id: int
+) -> list[tuple[Speaker, str | None]]:
+    """Each speaker with its linked person's name (None until someone renames it)."""
+    rows = await session.execute(
+        select(Speaker, Person.name)
+        .outerjoin(Person, Speaker.person_id == Person.id)
+        .where(Speaker.meeting_id == meeting_id)
+        .order_by(Speaker.id)
+    )
+    return [(speaker, name) for speaker, name in rows.tuples()]
+
+
+def action_item_out(item: ActionItem, display_names: dict[int, str]) -> ActionItemOut:
+    """The owner shown is the speaker's person name, else the speaker label, else the text."""
+    owner = (
+        display_names.get(item.owner_speaker_id)
+        if item.owner_speaker_id is not None
+        else item.owner_text
+    )
+    return ActionItemOut(
+        id=item.id,
+        description=item.description,
+        owner=owner,
+        due_date=item.due_date,
+        due_text=item.due_text,
+        status=ActionItemStatus(item.status),
+        evidence=item.evidence_utterance_ids,
+    )
+
+
 async def meeting_detail(session: AsyncSession, meeting: Meeting) -> MeetingDetailOut:
-    speaker_rows = (
-        await session.execute(
-            select(Speaker, Person.name)
-            .outerjoin(Person, Speaker.person_id == Person.id)
-            .where(Speaker.meeting_id == meeting.id)
-            .order_by(Speaker.id)
-        )
-    ).all()
+    speaker_rows = await speakers_with_names(session, meeting.id)
     display_names = {speaker.id: name or speaker.label for speaker, name in speaker_rows}
     utterances = (
         await session.scalars(
@@ -85,22 +120,7 @@ async def meeting_detail(session: AsyncSession, meeting: Meeting) -> MeetingDeta
         ],
         utterances=[UtteranceOut.model_validate(u) for u in utterances],
         summary=SummaryOut(overview=summary.overview, topics=summary.topics) if summary else None,
-        action_items=[
-            ActionItemOut(
-                id=item.id,
-                description=item.description,
-                owner=(
-                    display_names.get(item.owner_speaker_id)
-                    if item.owner_speaker_id is not None
-                    else item.owner_text
-                ),
-                due_date=item.due_date,
-                due_text=item.due_text,
-                status=item.status,  # pyright: ignore[reportArgumentType]  (validated into the enum)
-                evidence=item.evidence_utterance_ids,
-            )
-            for item in action_items
-        ],
+        action_items=[action_item_out(item, display_names) for item in action_items],
         decisions=[
             DecisionOut(id=d.id, text=d.text, evidence=d.evidence_utterance_ids) for d in decisions
         ],
@@ -171,3 +191,43 @@ async def get_meeting_detail(
     meeting_id: int, session: SessionDep, workspace_id: WorkspaceDep
 ) -> MeetingDetailOut:
     return await meeting_detail(session, await get_meeting(session, meeting_id, workspace_id))
+
+
+@router.get(
+    "/meetings/{meeting_id}/audio",
+    response_class=FileResponse,
+    responses={200: {"content": {"audio/mp4": {}}}},
+)
+async def get_meeting_audio(
+    meeting_id: int, session: SessionDep, workspace_id: WorkspaceDep, storage: StorageDep
+) -> FileResponse:
+    """The compressed playback copy. FileResponse answers Range requests, so seeking works."""
+    meeting = await get_meeting(session, meeting_id, workspace_id)
+    path = storage.path(meeting_key(meeting.id, "playback.m4a"))
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Audio is not ready yet.")
+    return FileResponse(path, media_type="audio/mp4")
+
+
+@router.post("/meetings/{meeting_id}/retry", status_code=202)
+async def retry_meeting(
+    meeting_id: int, session: SessionDep, workspace_id: WorkspaceDep, settings: SettingsDep
+) -> MeetingSummaryOut:
+    """Queue processing again. It resumes at the first step that hasn't finished."""
+    meeting = await get_meeting(session, meeting_id, workspace_id)
+    if meeting.status != MeetingStatus.failed and meeting.warning is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Only failed meetings or meetings with a warning can be retried.",
+        )
+    meeting.status = MeetingStatus.queued
+    meeting.error = None
+    meeting.warning = None
+    await enqueue(
+        session,
+        JOB_PROCESS_MEETING,
+        {"meeting_id": meeting.id},
+        max_attempts=settings.job_max_attempts,
+    )
+    await session.commit()
+    return MeetingSummaryOut.model_validate(meeting)

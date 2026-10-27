@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import routes_health, routes_meetings
+from app.api import routes_action_items, routes_health, routes_meetings, routes_speakers
 from app.config import Settings, get_settings
 from app.db.base import make_engine, make_session_factory
 from app.storage import LocalStorage
@@ -34,6 +34,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.include_router(routes_health.router)
     app.include_router(routes_meetings.router)
+    app.include_router(routes_speakers.router)
+    app.include_router(routes_action_items.router)
     return app
 
 
