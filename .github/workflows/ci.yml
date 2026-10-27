@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: meetings
+          POSTGRES_PASSWORD: meetings
+          POSTGRES_DB: meetings
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U meetings"
+          --health-interval 2s
+          --health-retries 30
+    env:
+      TEST_DATABASE_URL: postgresql+asyncpg://meetings:meetings@localhost:5432/meetings_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked
+      - run: uv run python -m ruff check .
+      - run: uv run python -m ruff format --check .
+      - run: uv run python -m pyright
+      - run: uv run python -m pytest -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: meetings
+          POSTGRES_PASSWORD: meetings
+          POSTGRES_DB: meetings
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U meetings"
+          --health-interval 2s
+          --health-retries 30
+    env:
+      ASR_PROVIDER: fake
+      DIARIZATION_PROVIDER: fake
+      LLM_PROVIDER: fake
+      DATABASE_URL: postgresql+asyncpg://meetings:meetings@localhost:5432/meetings
+      STORAGE_DIR: /tmp/meetings-storage
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: |
+          (cd backend && uv sync --locked)
+          (cd frontend && npm ci)
+      - name: Check the generated API types are up to date
+        run: |
+          (cd backend && uv run python -m app.api.export_openapi ../frontend/openapi.json)
+          (cd frontend && npm run gen:api)
+          git diff --exit-code frontend/openapi.json frontend/src/lib/api-types.ts
+      - name: Migrate the database
+        working-directory: backend
+        run: uv run python -m alembic upgrade head
+      - name: Start the API and the worker
+        working-directory: backend
+        run: |
+          nohup uv run python -m uvicorn app.api.main:app --port 8000 > "$RUNNER_TEMP/api.log" 2>&1 &
+          nohup uv run python -m app.jobs.worker > "$RUNNER_TEMP/worker.log" 2>&1 &
+          curl --fail --retry 30 --retry-connrefused --retry-delay 1 http://localhost:8000/api/health
+      - name: Build the frontend
+        working-directory: frontend
+        run: npm run build
+      - name: Install the Playwright browser
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Run the end-to-end test
+        working-directory: frontend
+        run: npm run e2e
+      - name: Upload the Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report
+      - name: Show server logs
+        if: failure()
+        run: cat "$RUNNER_TEMP/api.log" "$RUNNER_TEMP/worker.log"
